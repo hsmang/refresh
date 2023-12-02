@@ -3,14 +3,12 @@ import { ChevronRightIcon } from "@heroicons/react/24/solid";
 import { useState, useEffect } from "react";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import { walletState } from "@/recoil/state";
+import useAccount from "@/hooks/useAccount";
 
-type EthereumWindow = Window & {
-  ethereum?: {
-    request: (args: { method: string }) => Promise<string[]>;
-    send: (args: { method: string; params?: any[] }) => Promise<any>;
-    on: (event: string, callback: () => void) => void;
-  };
-};
+import TransferForm from "./TransferForm";
+import { useWeb3 } from "@/hooks/useWeb3";
+import TokenContract from '../../public/assets/abi/sender_abi.json';
+
 
 function maskAddress(address: string): string {
   // For example, display only the first 6 and last 4 characters
@@ -19,67 +17,69 @@ function maskAddress(address: string): string {
 }
 
 function WalletButton(): JSX.Element {
-  const [maticAmount, setMaticAmount] = useState<string>('');
-  const setWalletAddress = useSetRecoilState(walletState);
-  const walletAddress = useRecoilValue(walletState);
-  let ethereumWindow: EthereumWindow | null = null;
-  const MATIC_ADDRESS = '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0'; // Matic (Polygon) token contract address
+  const [account, web3] = useWeb3();
+  const [isLogin, setIsLogin] = useState<Boolean>();
+  const [balance, setBalance] = useState<number>();
+
+  const fireTx = async () => {
+    
+    const contractAddress = '0x18921Ba7EB599DA91C9A382a618f2f523Cde15c2'; // Matic 토큰 컨트랙트 주소
+    const contractAbi = TokenContract; // 전송 함수에 대한 ABI
+    const contract =  new web3.eth.Contract(contractAbi, contractAddress);
+
+    // 메서드의 인자 값 설정
+    const destinationChainSelector = 12532609583862916517;
+    const receiver = '0xa2F99Bb25E704b9E4e56bFC2F88314b67698e25B';
+    const text = 'Hello, world!';
+    const token = '0xFd57b4ddBf88a4e07fF4e34C487b99af2Fe82a05';
+    const amount = 	1000000000000000;
+
+    // Contract 메서드 호출 데이터 생성
+    const data = contract.methods.sendMessagePayLINK(
+      //destinationChainSelector,
+      receiver,
+      text,
+      token,
+      amount
+    ).encodeABI();
+
+    // 트랜잭션 객체 생성
+    const transactionObject = {
+      from: account,
+      to: contractAddress,
+      gas: '200000', // 예상 가스 비용
+      data: data,
+    };
+
+    console.log(transactionObject);
+
+    // MetaMask로 트랜잭션 전송 요청
+    window.ethereum.request({
+      method: 'eth_sendTransaction',
+      params: [transactionObject],
+    })
+      .then((txHash) => {
+        console.log('Transaction Hash:', txHash);
+      })
+      .catch((error) => {
+        console.error('Transaction Error:', error);
+      });
+  };
 
   useEffect(() => {
-    ethereumWindow = window as EthereumWindow;
-  })
-
-  const getReqAccts = async() => {
-
-    if (typeof window !== 'undefined' && ethereumWindow.ethereum) {
-      ethereumWindow.ethereum.request({ method: 'eth_requestAccounts' })
-        .then((accounts: string[]) => {
-          const address: string = accounts[0];
-
-          // Display a masked or shortened version of the wallet address
-          const maskedAddress: string = maskAddress(address);
-          setWalletAddress(maskedAddress);
-        })
-        .catch((error: Error) => {
-          console.error(error);
-        });
-    } else {
-      console.error('MetaMask is not installed');
-      alert('MetaMask is not installed')
-    }
-  };
-
-  const handleAccountChange = () => {
-    setWalletAddress('');
-  };
-
-  const handleMaticTransfer = async () => {
-    if (walletAddress) {
-      try {
-        // Convert the amount to wei (smallest unit of ETH)
-        const maticAmountInWei = window.ethereum.toWei(maticAmount, 'ether');
-
-        // Call the transfer function on the Matic token contract
-        const result = await ethereumWindow.ethereum.send({
-          method: 'eth_sendTransaction',
-          params: [
-            {
-              from: walletAddress,
-              to: MATIC_ADDRESS,
-              gas: '0x76c0', // Replace with the appropriate gas limit
-              gasPrice: '0x9184e72a000', // Replace with the appropriate gas price
-              value: maticAmountInWei,
-              data: '0x', // Data field is empty for simple transfers
-            }
-          ],
-        });
-
-        console.log('Transaction result:', result);
-      } catch (error) {
-        console.error('Error transferring Matic:', error);
+    (async function () {
+      const balance = await web3?.eth.getBalance(account);
+      if (balance !== undefined) {
+        setBalance(Number(balance) / 10 ** 18);
       }
+    })();
+
+    if (account === '') {
+      setIsLogin(false);
+    } else {
+      setIsLogin(true);
     }
-  };
+  }, [account]);
 
   return (
     <>
@@ -96,51 +96,42 @@ function WalletButton(): JSX.Element {
         }}
       >
         {
-          walletAddress !== '' 
-          ?
-          <>
-            <div>
-            <p>{walletAddress}</p>
-            <br>
-            </br>
-            <p>로그아웃</p>
-            <br/>
-            <label>
-        Matic Amount:
-        <input
-          type="text"
-          value={maticAmount}
-          onChange={(e) => setMaticAmount(e.target.value)}
-        />
-      </label>
+          isLogin
+            ?
+            <>
+              <div>
+                <p>{account}</p>
+                {/* <p>{balance}</p>
+                <br>
+                </br>
+                <p>로그아웃</p>
+                <br />
+                <label>
+                <button onClick={fireTx}>click</button>
+                </label> */}
+                </div>
+              </>
+              :
+              <>
+                <div>
+                  <Typography color="primary" variant="subtitle1">
+                    Connect Wallet
+                  </Typography>
+                  <Typography color="neutral.500" variant="body2">
+                    Click to connect.
+                  </Typography>
+                </div>
+           
 
-      <button onClick={handleMaticTransfer}>
-        Transfer Matic
-      </button>
-            </div>
+              <SvgIcon fontSize="small" sx={{ color: "neutral.500" }}>
+                <ChevronRightIcon />
+              </SvgIcon>
+              </>
             
-            
-          </> 
-          
-          : 
-          <>
-          <div onClick={getReqAccts}>
-          <Typography color="primary" variant="subtitle1">
-            Connect Wallet
-          </Typography>
-          <Typography color="neutral.500" variant="body2">
-            Click to connect.
-          </Typography>
-        </div>
-          </>
         }
-        
-        <SvgIcon fontSize="small" sx={{ color: "neutral.500" }}>
-          <ChevronRightIcon />
-        </SvgIcon>
-      </Box>
+        </Box>
     </>
   );
 }
 
-export default WalletButton;
+      export default WalletButton;

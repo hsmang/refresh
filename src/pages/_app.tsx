@@ -9,7 +9,8 @@ import { RecoilRoot } from "recoil";
 
 export default function App({ Component, pageProps }: AppProps) {
   const theme = createTheme();
-
+ 
+  
   return (
     <ThemeProvider theme={theme}>
       <RecoilRoot>
@@ -22,7 +23,9 @@ export default function App({ Component, pageProps }: AppProps) {
           theme="light"
         />
         <CssBaseline />
-        <Component {...pageProps} />
+       
+          <Component {...pageProps} />
+       
       </RecoilRoot>
     </ThemeProvider>
   );
